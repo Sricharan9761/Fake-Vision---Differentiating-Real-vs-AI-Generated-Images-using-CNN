@@ -10,17 +10,6 @@ To build a binary image classifier that distinguishes between AI-generated (fake
 
 ---
 
-## 🧰 Tech Stack
-
-- Python
-- TensorFlow / Keras
-- CNN (Convolutional Neural Networks)
-- Matplotlib, Seaborn
-- Scikit-learn
-- Kaggle Notebooks
-
----
-
 ## 🗃️ Dataset
 
 - **Name**: CIFAKE: Real and AI-Generated Synthetic Images
