@@ -1,0 +1,249 @@
+ 
+import kagglehub 
+ 
+# Download latest version 
+path = kagglehub.dataset_download("birdy654/cifake-real-and-ai-generated-synthetic-images") 
+ 
+print("Path to dataset files:", path) 
+ 
+import os 
+dataset_path='/kaggle/input/cifake-real-and-ai-generated-synthetic-images' 
+for folder in os.listdir(dataset_path): 
+    print(folder) 
+    print("->", os.listdir(os.path.join(dataset_path, folder))[:5])  # sample 5 images 
+ 
+import os 
+import shutil 
+import random 
+ 
+def create_small_dataset(source_dir, target_dir, samples_per_class=5000): 
+ 
+    classes = ['REAL', 'FAKE'] 
+    os.makedirs(target_dir, exist_ok=True) 
+ 
+ 
+    for cls in classes: 
+        src_folder = os.path.join(source_dir, cls) 
+        dst_folder = os.path.join(target_dir, cls) 
+        os.makedirs(dst_folder, exist_ok=True) 
+ 
+        files = os.listdir(src_folder) 
+        random.shuffle(files) 
+        selected_files = files[:samples_per_class] 
+ 
+        for fname in selected_files: 
+            shutil.copy(os.path.join(src_folder, fname), os.path.join(dst_folder, fname)) 
+ 
+# Example usage: 
+source = "/kaggle/input/cifake-real-and-ai-generated-synthetic-images/train" 
+target = "/content/reduced_dataset/train" 
+create_small_dataset(source, target, samples_per_class=5000) 
+ 
+ 
+dataset_path = "/content/reduced_dataset/train" 
+from tensorflow.keras.preprocessing.image import ImageDataGenerator 
+ 
+train_datagen = ImageDataGenerator(rescale=1./255, validation_split=0.2) 
+ 
+train_generator = train_datagen.flow_from_directory( 
+    dataset_path, 
+    target_size=(224, 224), 
+    batch_size=32, 
+    class_mode='binary', 
+    subset='training', 
+    shuffle=True 
+) 
+ 
+val_generator = train_datagen.flow_from_directory( 
+    dataset_path, 
+    target_size=(224, 224), 
+    batch_size=32, 
+    class_mode='binary', 
+    subset='validation', 
+    shuffle=False 
+) 
+ 
+from tensorflow.keras.models import Sequential 
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout, 
+BatchNormalization, Input 
+from tensorflow.keras.optimizers import Adam 
+ 
+def build_model(input_shape=(224, 224, 3)): 
+    model = Sequential([ 
+        Input(shape=input_shape), 
+ 
+        Conv2D(32, (3,3), activation='relu', padding='same'), 
+        BatchNormalization(), 
+        MaxPooling2D(2,2), 
+ 
+        Conv2D(64, (3,3), activation='relu', padding='same'), 
+        BatchNormalization(), 
+        MaxPooling2D(2,2), 
+ 
+ 
+        Conv2D(128, (3,3), activation='relu', padding='same'), 
+        BatchNormalization(), 
+        MaxPooling2D(2,2), 
+ 
+        Dropout(0.3), 
+        Flatten(), 
+ 
+        Dense(128, activation='relu'), 
+        BatchNormalization(), 
+        Dropout(0.4), 
+ 
+        Dense(1, activation='sigmoid') 
+    ]) 
+ 
+    model.compile(optimizer=Adam(learning_rate=1e-4), 
+                  loss='binary_crossentropy', 
+                  metrics=['accuracy']) 
+    return model 
+ 
+model = build_model() 
+model.summary() 
+ 
+from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint 
+ 
+# Callbacks 
+early_stop = EarlyStopping(monitor='val_loss', patience=3, restore_best_weights=True) 
+ 
+checkpoint = ModelCheckpoint("best_model.keras", monitor='val_accuracy', save_best_only=True) 
+ 
+ 
+ 
+# Train the model 
+history = model.fit( 
+    train_generator, 
+    epochs=10, 
+    validation_data=val_generator, 
+    callbacks=[early_stop, checkpoint] 
+) 
+ 
+import matplotlib.pyplot as plt 
+ 
+def plot_metrics(history): 
+    acc = history.history['accuracy'] 
+    val_acc = history.history['val_accuracy'] 
+    loss = history.history['loss'] 
+    val_loss = history.history['val_loss'] 
+    epochs_range = range(len(acc)) 
+ 
+    plt.figure(figsize=(14, 5)) 
+ 
+    plt.subplot(1, 2, 1) 
+    plt.plot(epochs_range, acc, label='Training Accuracy') 
+    plt.plot(epochs_range, val_acc, label='Validation Accuracy') 
+    plt.legend() 
+    plt.title('Training and Validation Accuracy') 
+ 
+    plt.subplot(1, 2, 2) 
+    plt.plot(epochs_range, loss, label='Training Loss') 
+    plt.plot(epochs_range, val_loss, label='Validation Loss') 
+    plt.legend() 
+ 
+    plt.title('Training and Validation Loss') 
+ 
+    plt.show() 
+ 
+plot_metrics(history) 
+ 
+from tensorflow.keras.preprocessing.image import ImageDataGenerator 
+ 
+# Only rescaling 
+test_datagen = ImageDataGenerator(rescale=1./255) 
+ 
+test_generator = test_datagen.flow_from_directory( 
+    '/kaggle/input/cifake-real-and-ai-generated-synthetic-images/test', 
+    target_size=(224, 224), 
+    batch_size=32, 
+    class_mode='binary', 
+    shuffle=False 
+) 
+ 
+# Evaluate 
+test_loss, test_accuracy = model.evaluate(test_generator) 
+print(f"\n   Test Accuracy: {test_accuracy * 100:.2f}%") 
+print(f"    Test Loss: {test_loss:.4f}") 
+ 
+import matplotlib.pyplot as plt 
+ 
+# Accuracy plot 
+plt.figure(figsize=(12, 5)) 
+plt.subplot(1, 2, 1) 
+plt.plot(history.history['accuracy'], label='Train Accuracy', marker='o') 
+plt.plot(history.history['val_accuracy'], label='Val Accuracy', marker='o') 
+plt.title('Model Accuracy') 
+plt.xlabel('Epoch') 
+plt.ylabel('Accuracy') 
+plt.legend() 
+plt.grid(True) 
+ 
+# Loss plot 
+plt.subplot(1, 2, 2) 
+plt.plot(history.history['loss'], label='Train Loss', marker='o') 
+plt.plot(history.history['val_loss'], label='Val Loss', marker='o') 
+plt.title('Model Loss') 
+plt.xlabel('Epoch') 
+plt.ylabel('Loss') 
+plt.legend() 
+plt.grid(True) 
+ 
+plt.tight_layout() 
+plt.show() 
+ 
+import numpy as np 
+ 
+# Predict probabilities 
+y_pred_prob = model.predict(test_generator, verbose=1) 
+ 
+# Convert to class labels (0 or 1) 
+y_pred = (y_pred_prob > 0.5).astype("int").flatten() 
+ 
+# Get true labels from generator 
+y_true = test_generator.classes 
+ 
+# Get class labels 
+class_labels = list(test_generator.class_indices.keys()) 
+ 
+import seaborn as sns 
+import matplotlib.pyplot as plt 
+from sklearn.metrics import confusion_matrix, classification_report 
+ 
+# Confusion matrix 
+cm = confusion_matrix(y_true, y_pred) 
+ 
+# Plot it 
+plt.figure(figsize=(6, 5)) 
+sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", xticklabels=class_labels, 
+yticklabels=class_labels) 
+plt.xlabel("Predicted Label") 
+plt.ylabel("True Label") 
+plt.title("Confusion Matrix") 
+plt.show() 
+ 
+# Print precision, recall, f1-score 
+print("      Classification Report:\n") 
+print(classification_report(y_true, y_pred, target_names=class_labels)) 
+ 
+ 
+# Get file paths from the test generator 
+file_paths = np.array(test_generator.filepaths) 
+ 
+# Find indexes of misclassified samples 
+misclassified_idx = np.where(y_pred != y_true)[0] 
+ 
+# Display a few misclassified images 
+import random 
+random_misclassified = random.sample(list(misclassified_idx), 9) 
+ 
+plt.figure(figsize=(15, 10)) 
+for i, idx in enumerate(random_misclassified): 
+    img = plt.imread(file_paths[idx]) 
+    plt.subplot(3, 3, i + 1) 
+    plt.imshow(img) 
+    plt.axis('off') 
+    plt.title(f"True: {class_labels[y_true[idx]]}, Pred: {class_labels[y_pred[idx]]}") 
+plt.suptitle("  Misclassified Examples", fontsize=18) 
+plt.tight_layout() 
+plt.show()
